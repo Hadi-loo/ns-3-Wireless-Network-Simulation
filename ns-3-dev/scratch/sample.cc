@@ -31,6 +31,8 @@ using namespace ns3;
 using namespace std;
 NS_LOG_COMPONENT_DEFINE ("WifiTopology");
 
+#define MAPPER_NODES_COUNT  1
+
 void
 ThroughputMonitor (FlowMonitorHelper *fmhelper, Ptr<FlowMonitor> flowMon, double em)
 {
@@ -165,33 +167,51 @@ MyHeader::GetData (void) const
 
 class master : public Application
 {
-public:
-    master (uint16_t port, Ipv4InterfaceContainer& ip);
-    virtual ~master ();
 private:
-    virtual void StartApplication (void);
-    void HandleRead (Ptr<Socket> socket);
-
-    uint16_t port;
-    Ipv4InterfaceContainer ip;
+    uint16_t master_port;
+    Ipv4InterfaceContainer staNodesMasterInterface;
+    uint16_t mapper_port; 
+    Ipv4InterfaceContainer staNodesMapperInterface;
     Ptr<Socket> socket;
-};
 
+    virtual void StartApplication (void);
+    void HandleRead (Ptr<Socket> socket, Ptr<Socket> sock);
+public:
+    master (uint16_t master_port, Ipv4InterfaceContainer& staNodesMasterInterface, uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInterface);
+    virtual ~master ();
+};
 
 class client : public Application
 {
+private:
+    uint16_t port;
+    Ptr<Socket> socket;
+    Ipv4InterfaceContainer ip;
+
+    virtual void StartApplication (void);
+
 public:
     client (uint16_t port, Ipv4InterfaceContainer& ip);
     virtual ~client ();
 
-private:
-    virtual void StartApplication (void);
-
-    uint16_t port;
-    Ptr<Socket> socket;
-    Ipv4InterfaceContainer ip;
 };
 
+// TODO: needs some handlers and helper methods and probably some attributes
+class mapper : public Application
+{
+private:
+    uint16_t mapper_port;
+    Ptr<Socket> socket;
+    Ipv4InterfaceContainer staNodesMapperInterface;
+
+    virtual void StartApplication (void);
+    void HandleRead (Ptr<Socket> socket);
+
+public:
+    mapper (uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInterface);
+    virtual ~mapper ();
+
+};
 
 int
 main (int argc, char *argv[])
@@ -222,6 +242,10 @@ main (int argc, char *argv[])
     NodeContainer wifiStaNodeMaster;
     wifiStaNodeMaster.Create (1);
 
+    // TODO:
+    NodeContainer wifiStaNodeMapper;
+    wifiStaNodeMapper.Create(MAPPER_NODES_COUNT);
+
     YansWifiChannelHelper channel = YansWifiChannelHelper::Default ();
 
     YansWifiPhyHelper phy;
@@ -238,13 +262,16 @@ main (int argc, char *argv[])
 
     NetDeviceContainer staDeviceClient;
     staDeviceClient = wifi.Install (phy, mac, wifiStaNodeClient);
-
     mac.SetType ("ns3::ApWifiMac", "Ssid", SsidValue (ssid));
 
     NetDeviceContainer staDeviceMaster;
     staDeviceMaster = wifi.Install (phy, mac, wifiStaNodeMaster);
-
     mac.SetType ("ns3::StaWifiMac","Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false));
+
+    // TODO:
+    NetDeviceContainer staDeviceMapper;
+    staDeviceMapper = wifi.Install (phy, mac, wifiStaNodeMapper);
+    mac.SetType ("ns3::ApWifiMac", "Ssid", SsidValue (ssid));
 
     Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
     em->SetAttribute ("ErrorRate", DoubleValue (error));
@@ -267,32 +294,56 @@ main (int argc, char *argv[])
     mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
     mobility.Install (wifiStaNodeMaster);
 
+    // TODO:
+    mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel",
+                               "Bounds", RectangleValue (Rectangle (-50, 50, -50, 50)));
+    mobility.Install (wifiStaNodeMapper);
+
     InternetStackHelper stack;
     stack.Install (wifiStaNodeClient);
     stack.Install (wifiStaNodeMaster);
+
+    // TODO:
+    stack.Install (wifiStaNodeMapper);
 
     Ipv4AddressHelper address;
 
     Ipv4InterfaceContainer staNodeClientInterface;
     Ipv4InterfaceContainer staNodesMasterInterface;
 
+    // TODO: 
+    Ipv4InterfaceContainer staNodesMapperInterface;
+
     address.SetBase ("10.1.3.0", "255.255.255.0");
     staNodeClientInterface = address.Assign (staDeviceClient);
     staNodesMasterInterface = address.Assign (staDeviceMaster);
 
+    // TODO:
+    staNodesMapperInterface = address.Assign (staDeviceMapper);
+
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
     uint16_t port = 1102;
+    // TODO: change port_temp to something more meaningful
+    uint16_t port_temp = 1103;
 
     Ptr<client> clientApp = CreateObject<client> (port, staNodesMasterInterface);
     wifiStaNodeClient.Get (0)->AddApplication (clientApp);
     clientApp->SetStartTime (Seconds (0.0));
     clientApp->SetStopTime (Seconds (duration));  
 
-    Ptr<master> masterApp = CreateObject<master> (port, staNodesMasterInterface);
+    Ptr<master> masterApp = CreateObject<master> (port, staNodesMasterInterface, port_temp, staNodesMapperInterface);
     wifiStaNodeMaster.Get (0)->AddApplication (masterApp);
     masterApp->SetStartTime (Seconds (0.0));
     masterApp->SetStopTime (Seconds (duration));  
+
+    // TODO: implement same shit for mappers
+    // for (int i = 0; i < MAPPER_NODES_COUNT; i++) {
+    //     Ptr<mapper> mapperApp = CreateObject<mapper> (port, staNodesMapperInterface); // first we need to define mapper class 
+    //     wifiStaNodeMaster.Get (i)->AddApplication (masterApp);
+    //     masterApp->SetStartTime (Seconds (0.0));
+    //     masterApp->SetStopTime (Seconds (duration));
+    // }
 
     NS_LOG_INFO ("Run Simulation");
 
@@ -308,6 +359,17 @@ main (int argc, char *argv[])
 
     return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 client::client (uint16_t port, Ipv4InterfaceContainer& ip)
         : port (port),
@@ -343,9 +405,13 @@ client::StartApplication (void)
     GenerateTraffic(sock, 0);
 }
 
-master::master (uint16_t port, Ipv4InterfaceContainer& ip)
-        : port (port),
-          ip (ip)
+// ========================================================================================================
+
+master::master (uint16_t master_port, Ipv4InterfaceContainer& staNodesMasterInterface, uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInterface) 
+        : master_port (master_port),
+        staNodesMasterInterface (staNodesMasterInterface),
+        mapper_port (mapper_port),
+        staNodesMapperInterface (staNodesMapperInterface)
 {
     std::srand (time(0));
 }
@@ -358,14 +424,62 @@ void
 master::StartApplication (void)
 {
     socket = Socket::CreateSocket (GetNode (), UdpSocketFactory::GetTypeId ());
-    InetSocketAddress local = InetSocketAddress (ip.GetAddress(0), port);
+    InetSocketAddress local = InetSocketAddress (staNodesMasterInterface.GetAddress(0), master_port);
     socket->Bind (local);
 
-    socket->SetRecvCallback (MakeCallback (&master::HandleRead, this));
+    Ptr<Socket> sock = Socket::CreateSocket (GetNode (), TcpSocketFactory::GetTypeId ());
+    InetSocketAddress sockAddr (staNodesMapperInterface.GetAddress(0), mapper_port);
+    sock->Connect (sockAddr);
+
+    socket->SetRecvCallback (MakeCallback (&master::HandleRead, this, sock));
 }
 
 void 
-master::HandleRead (Ptr<Socket> socket)
+master::HandleRead (Ptr<Socket> socket, Ptr<Socket> sock)
+{
+    Ptr<Packet> packet;
+
+    while ((packet = socket->Recv ()))
+    {
+        if (packet->GetSize () == 0)
+        {
+            break;
+        }
+
+        // MyHeader destinationHeader;
+        // packet->RemoveHeader (destinationHeader);
+        // destinationHeader.Print(std::cout);
+
+        sock->Send (packet);
+    }
+}
+
+// ==========================================================================================
+
+mapper::mapper (uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInterface)
+        : mapper_port (mapper_port),
+          staNodesMapperInterface (staNodesMapperInterface)
+{
+    std::srand (time(0));
+}
+
+mapper::~mapper ()
+{
+}
+
+void
+mapper::StartApplication (void)
+{
+    socket = Socket::CreateSocket (GetNode (), TcpSocketFactory::GetTypeId ());
+    InetSocketAddress local = InetSocketAddress (staNodesMapperInterface.GetAddress(0), mapper_port);
+    socket->Bind (local);
+
+    socket->SetRecvCallback (MakeCallback (&mapper::HandleRead, this));
+
+}
+
+void 
+mapper::HandleRead (Ptr<Socket> socket)
 {
     Ptr<Packet> packet;
 
@@ -381,3 +495,7 @@ master::HandleRead (Ptr<Socket> socket)
         destinationHeader.Print(std::cout);
     }
 }
+
+
+
+
