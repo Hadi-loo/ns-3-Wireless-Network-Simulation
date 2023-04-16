@@ -1,8 +1,9 @@
 #include <cstdlib>
-#include<time.h>
+#include <time.h>
 #include <stdio.h>
 #include <string>
 #include <fstream>
+#include <map>
 
 #include "ns3/core-module.h"
 #include "ns3/point-to-point-module.h"
@@ -31,7 +32,9 @@ using namespace ns3;
 using namespace std;
 NS_LOG_COMPONENT_DEFINE ("WifiTopology");
 
-#define MAPPER_NODES_COUNT  3
+constexpr int MAPPER_NODES_COUNT    = 3;
+constexpr int CHARACTERS_COUNT      = 26;
+constexpr int CHARACTERS_START      = 64;
 
 void
 ThroughputMonitor (FlowMonitorHelper *fmhelper, Ptr<FlowMonitor> flowMon, double em)
@@ -201,7 +204,6 @@ public:
 
 };
 
-// TODO: needs some handlers and helper methods and probably some attributes
 class mapper : public Application
 {
 private:
@@ -212,6 +214,7 @@ private:
     int mapper_id;
     Ptr<Socket> master_socket;
     Ptr<Socket> client_socket;
+    map<int, int> encodings;
 
     virtual void StartApplication (void);
     void HandleRead (Ptr<Socket> socket);
@@ -228,7 +231,7 @@ main (int argc, char *argv[])
     double error = 0.000001;
     string bandwidth = "1Mbps";
     bool verbose = true;
-    double duration = 2.0;
+    double duration = 10.0;
     bool tracing = false;
 
     srand(time(NULL));
@@ -363,8 +366,8 @@ main (int argc, char *argv[])
     FlowMonitorHelper flowHelper;
     flowMonitor = flowHelper.InstallAll();
 
-    // ThroughputMonitor (&flowHelper, flowMonitor, error);
-    // AverageDelayMonitor (&flowHelper, flowMonitor, error);
+    ThroughputMonitor (&flowHelper, flowMonitor, error);
+    AverageDelayMonitor (&flowHelper, flowMonitor, error);
 
     Simulator::Stop (Seconds (duration));
     Simulator::Run ();
@@ -414,6 +417,8 @@ static void GenerateTraffic (Ptr<Socket> socket, uint16_t data)
     packet->Print (std::cout);
     socket->Send(packet);
 
+    cout << "Generated: " << data << endl;
+
     Simulator::Schedule (Seconds (0.1), &GenerateTraffic, socket, rand() % 26);
 }
 
@@ -449,7 +454,9 @@ client::HandleRead (Ptr<Socket> socket)
 
         MyHeader destinationHeader;
         packet->RemoveHeader (destinationHeader);
-        destinationHeader.Print(std::cout);
+        // destinationHeader.Print(std::cout);
+        char ch = static_cast<char>(destinationHeader.GetData());
+        cout << "encoded: " << ch << endl;
     }
 }
 
@@ -526,6 +533,12 @@ mapper::mapper (uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInte
           mapper_id (mapper_id)
 {
     std::srand (time(0));
+    int start = mapper_id * CHARACTERS_COUNT / MAPPER_NODES_COUNT;
+    int end = (mapper_id + 1) * CHARACTERS_COUNT / MAPPER_NODES_COUNT;
+    if (mapper_id == MAPPER_NODES_COUNT - 1)
+        end = CHARACTERS_COUNT;
+    for (int i = start; i < end; i++)
+        encodings[i] = i + CHARACTERS_START;
 }
 
 mapper::~mapper ()
@@ -560,7 +573,7 @@ void
 mapper::HandleRead (Ptr<Socket> socket1)
 {
     Ptr<Packet> packet;
-    cout << "mapper id: " << mapper_id << endl;
+    // cout << "mapper id: " << mapper_id << endl;
     while ((packet = socket1->Recv ()))
     {
         if (packet->GetSize () == 0)
@@ -572,6 +585,16 @@ mapper::HandleRead (Ptr<Socket> socket1)
         packet->RemoveHeader (destinationHeader);
         // cout << bytes_received << endl;
         // destinationHeader.Print(std::cout);
+        int value = destinationHeader.GetData();
+        auto it = encodings.find(value);
+        if (it != encodings.end()) {
+            destinationHeader.SetData(it->second);
+        } else {
+            continue;
+        }
+
+        cout << "mapper id: " << mapper_id << endl;
+
         Ptr<Packet> send_packet = new Packet();
         send_packet->AddHeader(destinationHeader);
         // Ptr<Packet> packet = new Packet();
@@ -583,6 +606,7 @@ mapper::HandleRead (Ptr<Socket> socket1)
         // send_packet->AddHeader (m);
         // send_packet->Print (std::cout);
         client_socket->Send (send_packet);
+        
     }
 }
 
