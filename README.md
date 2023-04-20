@@ -1,14 +1,72 @@
 # CN_CHomeworks_2
 
 ## ns3-simulation
-
 In this project, we simulate a simple network topology of 3 nodes using NS3 3.35 YANS Simulator. Note that our system coded using IEEE 802.11 protocol.
 We have three type of entity in our network:   
 - Client: Client is the inital sender of packets in the system. Client sending some ranodom numbers to the master node, the first phase of mapping process.    
 -  Master: Master is the first packet receiver in the system. packets are sent from the client node to the master node via UDP connection. Then the master node send these packets to the mapper nodes using TCP connection.    
 - Mapper: Mapper is the node which mapping the incoming data to the corresponding character. After mapping, mapper nodes send the mapped data to the client node using UDP connection.
 
+
 ## Client
+This is the first node in our network. Client is the inital sender of packets in the system to Master node over UDP connection. It also receives the mapped data from the mapper nodes over UDP connection.  
+Client stores Ip address and port number of the master and itself which are used in the UDP connection.
+
+### Constructor:
+```cpp
+client::client (uint16_t master_port, Ipv4InterfaceContainer& staNodesMasterInterface , uint16_t client_port, Ipv4InterfaceContainer& staNodesClientInterface);
+```
+
+We need to override the StartApplication function to start the client application when the simulation starts.  
+
+### StartApplication:
+```cpp
+void
+client::StartApplication (void)
+{
+    master_socket = Socket::CreateSocket (GetNode (), UdpSocketFactory::GetTypeId ());
+    InetSocketAddress sockAddr (staNodesMasterInterface.GetAddress(0), master_port);
+    master_socket->Connect (sockAddr);
+
+    mapper_socket = Socket::CreateSocket (GetNode (), UdpSocketFactory::GetTypeId ());
+    InetSocketAddress local = InetSocketAddress (staNodesClientInterface.GetAddress(0), client_port);
+    mapper_socket->Bind (local);
+
+    GenerateTraffic(master_socket, 0);
+    mapper_socket->SetRecvCallback (MakeCallback (&client::HandleRead, this));
+}
+```
+
+In this function, first we create a UDP socket to connect to the master node.  
+Then we create a UDP socket to receive the mapped data from the mapper nodes.  
+After that, we call the ```GenerateTraffic``` function to send the random numbers to the master node.  
+Finally, we set the ```HandleRead``` function as the callback function to handle the incoming packets.
+
+### HandleRead:
+```cpp
+void 
+client::HandleRead (Ptr<Socket> socket)
+{
+    Ptr<Packet> packet;
+
+    while ((packet = mapper_socket->Recv ()))
+    {
+        if (packet->GetSize () == 0)
+        {
+            break;
+        }
+
+        MyHeader destinationHeader;
+        packet->RemoveHeader (destinationHeader);
+        char ch = static_cast<char>(destinationHeader.GetData());
+        cout << "decoded: " << ch << endl;
+        cout << "=====================" << endl;
+    }
+}
+```
+
+In this function, we receive the mapped data from the mapper nodes and print the decoded character.
+
 
 
 ## Master
