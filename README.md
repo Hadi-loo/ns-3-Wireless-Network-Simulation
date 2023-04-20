@@ -217,8 +217,17 @@ In this function, we receive the packets from the master node and send the mappe
 
 ## Results
 
-In this project, we measure two metrics: Throughput and End to End Delay (Latency).  
+In this project, we measure two main metrics: Throughput and End to End Delay (Latency).  
 We mesure Throughput in terms of Mbits/s in ```ThroughputMonitor``` function and Delay in terms of seconds in ```AverageDelayMonitor``` function.
+
+Complete list of metrics:  
+- Tx Packets: Number of transmitted packets by the node.
+- Rx Packets: Number of received packets by the node.
+- Duration: Duration of the transmission.
+- Last Received Packet: Time of the last received packet.
+- Throughput: Sum of the size of all received packets divided by the duration of the transmission. 
+- Sum of e2e Delay: Sum of the end to end delay of all received packets.
+- Average e2e Delay: Sum of e2e Delay divided by the number of received packets. 
 
 As we can see in the following figure, the decoded messages are correct.  
 ![image](https://user-images.githubusercontent.com/83643850/233453693-7f9fb111-66fa-4d13-b6af-7b32a78d4a22.png)  
@@ -229,7 +238,7 @@ The first flow is the flow from the client node to the master node which is a UD
 The second flow is the flow from the master node to the mapper nodes which is a TCP flow. The third flow is the acknowledgement flow from the mapper nodes to the master node which is a TCP flow.  
 The last flow is the flow from the mapper nodes to the client node which is a UDP flow.  
 
-We can see the metrics values for each flow when sending a new packet every 0.1 seconds, every 0.01 seconds, and every 0.006 seconds using 3 mapper nodes in the following figures.
+We can see the metrics values for each flow when sending a new packet every 0.1 seconds and every 0.006 seconds using 3 mapper nodes in the following figures.
 
 ### Packets Sending Rate: 10 Packets/Second
 
@@ -246,13 +255,6 @@ We can see the metrics values for each flow when sending a new packet every 0.1 
 ![image](https://user-images.githubusercontent.com/83643850/233455336-8913fddd-0767-4c92-af15-da538a4494cb.png)
 
 
-### Packets Sending Rate: 100 Packets/Second
-* Client Node to Master Node  
----------------------------------------------- Figure 5 ----------------------------------------------
-* Master Node to Mapper Nodes (and Mapper Nodes to Master Node Because of TCP Connection)  
----------------------------------------------- Figure 6 ----------------------------------------------
-* Mapper Nodes to Client Node  
----------------------------------------------- Figure 7 ----------------------------------------------
 
 ### Packets Sending Rate: 167 Packets/Second
 * Client Node to Master Node  
