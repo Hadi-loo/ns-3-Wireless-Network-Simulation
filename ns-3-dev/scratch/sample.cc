@@ -448,7 +448,7 @@ client::HandleRead (Ptr<Socket> socket)
         MyHeader destinationHeader;
         packet->RemoveHeader (destinationHeader);
         char ch = static_cast<char>(destinationHeader.GetData());
-        cout << "encoded: " << ch << endl;
+        cout << "decoded: " << ch << endl;
         cout << "=====================" << endl;
     }
 }
@@ -588,7 +588,7 @@ mapper::HandleRead (Ptr<Socket> socket1)
         Ptr<Packet> send_packet = new Packet();
         send_packet->AddHeader(destinationHeader);
         client_socket->Send (send_packet);
-        
+
     }
 }
 
