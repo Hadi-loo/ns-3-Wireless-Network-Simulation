@@ -214,6 +214,134 @@ In this function, we receive the packets from the master node and send the mappe
 
 ## sample.cc
 
+The main function is in the sample.cc file. In this file, we create the nodes and connect them to each other and start the simulation.
+
+There are some steps to create the nodes and connect them to each other:
+
+1. Creating the nodes:
+```cpp
+NodeContainer wifiStaNodeClient;
+wifiStaNodeClient.Create (1);
+
+NodeContainer wifiStaNodeMaster;
+wifiStaNodeMaster.Create (1);
+
+NodeContainer wifiStaNodeMapper;
+wifiStaNodeMapper.Create (MAPPER_NODES_COUNT);
+```
+
+2. Creating the wifi channel:
+```cpp
+YansWifiChannelHelper channel = YansWifiChannelHelper::Default ();
+```
+
+3. Creating the wifi physical layer of the network simulation:
+```cpp
+YansWifiPhyHelper phy;
+phy.SetChannel (channel.Create ());
+```
+
+4. Configuring the wifi standard: 
+```cpp
+WifiHelper wifi;
+wifi.SetStandard(WIFI_STANDARD_80211b);
+wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
+```
+
+5. Creating the wifi mac layer of the network simulation:
+```cpp
+WifiMacHelper mac;
+Ssid ssid = Ssid ("ns-3-ssid");
+mac.SetType ("ns3::StaWifiMac",
+                "Ssid", SsidValue (ssid),
+                "ActiveProbing", BooleanValue (false));
+
+NetDeviceContainer staDeviceClient;
+staDeviceClient = wifi.Install (phy, mac, wifiStaNodeClient);
+mac.SetType ("ns3::ApWifiMac", "Ssid", SsidValue (ssid));
+
+NetDeviceContainer staDeviceMaster;
+staDeviceMaster = wifi.Install (phy, mac, wifiStaNodeMaster);
+mac.SetType ("ns3::StaWifiMac","Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false));
+
+NetDeviceContainer staDeviceMapper;
+staDeviceMapper = wifi.Install (phy, mac, wifiStaNodeMapper);
+mac.SetType ("ns3::ApWifiMac", "Ssid", SsidValue (ssid));
+```
+
+6. Configuring the mobility model:
+```cpp
+MobilityHelper mobility;
+
+mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
+                                "MinX", DoubleValue (0.0),
+                                "MinY", DoubleValue (0.0),
+                                "DeltaX", DoubleValue (2.0),
+                                "DeltaY", DoubleValue (4.0),
+                                "GridWidth", UintegerValue (7),
+                                "LayoutType", StringValue ("RowFirst"));
+
+mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel",
+                            "Bounds", RectangleValue (Rectangle (-50, 50, -50, 50)));
+mobility.Install (wifiStaNodeClient);
+
+mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
+mobility.Install (wifiStaNodeMaster);
+
+mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel",
+                            "Bounds", RectangleValue (Rectangle (-50, 50, -50, 50)));
+mobility.Install (wifiStaNodeMapper);
+```
+
+7. Configuring the internet stack:
+```cpp
+InternetStackHelper stack;
+stack.Install (wifiStaNodeClient);
+stack.Install (wifiStaNodeMaster);
+stack.Install (wifiStaNodeMapper);
+```
+
+8. Configuring the IP addresses:
+```cpp
+Ipv4AddressHelper address;
+
+Ipv4InterfaceContainer staNodeClientInterface;
+Ipv4InterfaceContainer staNodesMasterInterface;
+Ipv4InterfaceContainer staNodesMapperInterface;
+
+address.SetBase ("10.1.3.0", "255.255.255.0");
+staNodeClientInterface = address.Assign (staDeviceClient);
+staNodesMasterInterface = address.Assign (staDeviceMaster);
+staNodesMapperInterface = address.Assign (staDeviceMapper);
+```
+
+Finally, we need to create Client, Master and Mapper nodes and add their applications.
+```cpp
+Ptr<client> clientApp = CreateObject<client> (UDP_master_port, staNodesMasterInterface , UDP_client_port , staNodeClientInterface);
+wifiStaNodeClient.Get (0)->AddApplication (clientApp);
+clientApp->SetStartTime (Seconds (1.0));
+clientApp->SetStopTime (Seconds (duration));  
+
+Ptr<master> masterApp = CreateObject<master> (UDP_master_port, staNodesMasterInterface, TCP_port, staNodesMapperInterface);
+wifiStaNodeMaster.Get (0)->AddApplication (masterApp);
+masterApp->SetStartTime (Seconds (1.0));
+masterApp->SetStopTime (Seconds (duration));
+
+for (int i = 0; i < MAPPER_NODES_COUNT; i++) {
+    Ptr<mapper> mapperApp = CreateObject<mapper> (TCP_port, staNodesMapperInterface, UDP_client_port, staNodeClientInterface , i);
+    wifiStaNodeMapper.Get (i)->AddApplication (mapperApp);
+    mapperApp->SetStartTime (Seconds (1.0));
+    mapperApp->SetStopTime (Seconds (duration));
+}
+```
+
+After all of this, we can set stop time of simulation and run it.
+
+```cpp
+Simulator::Stop (Seconds (duration));
+Simulator::Run ();
+```
+
 
 ## Results
 
