@@ -70,6 +70,65 @@ In this function, we receive the mapped data from the mapper nodes and print the
 
 
 ## Master
+This is the second node in our network. Master is the first packet receiver in the system. packets are sent from the client node to the master node via UDP connection. Then the master node send these packets to the mapper nodes using TCP connection.  
+Master stores Ip address and port number of the mapper nodes and itself which are used in UDP and TCP connections.
+
+### Constructor:
+```cpp
+master::master (uint16_t master_port, Ipv4InterfaceContainer& staNodesMasterInterface, uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInterface) 
+```
+
+We need to override the StartApplication function to start the master application when the simulation starts.
+
+### StartApplication:
+```cpp
+void
+master::StartApplication (void)
+{
+    socket_client = Socket::CreateSocket (GetNode (), UdpSocketFactory::GetTypeId ());
+    InetSocketAddress local = InetSocketAddress (staNodesMasterInterface.GetAddress(0), master_port);
+    socket_client->Bind (local);
+
+    for (int i = 0; i < MAPPER_NODES_COUNT; i++){
+        socket_mappers[i] = Socket::CreateSocket (GetNode (), TcpSocketFactory::GetTypeId ());
+        InetSocketAddress sockAddr = InetSocketAddress (staNodesMapperInterface.GetAddress(i), mapper_port + i);
+        socket_mappers[i]->Connect (sockAddr); 
+    }
+
+    socket_client->SetRecvCallback (MakeCallback(&master::HandleRead , this));
+}
+‍‍‍‍‍```
+
+In this function, first we create a UDP socket to receive the packets from the client node.  
+Then we create TCP sockets to connect to the mapper nodes.  
+Finally, we set the ```HandleRead``` function as the callback function to handle the incoming packets.
+
+
+### HandleRead:
+```cpp
+void 
+master::HandleRead (Ptr<Socket> socket)
+{
+    Ptr<Packet> packet;
+
+    while ((packet = socket_client->Recv ()))
+    {
+        if (packet->GetSize () == 0)
+        {
+            break;
+        }
+
+        MyHeader destinationHeader;
+        packet->RemoveHeader (destinationHeader);
+        Ptr<Packet> send_packet = new Packet();
+        send_packet->AddHeader(destinationHeader);
+        for (auto socket_mapper : socket_mappers)
+            socket_mapper->Send (send_packet);
+    }
+}
+```
+
+In this function, we receive the packets from the client node and send them to the mapper nodes using TCP connection.
 
 
 ## Mapper
