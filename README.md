@@ -132,6 +132,84 @@ In this function, we receive the packets from the client node and send them to t
 
 
 ## Mapper
+This is the third node in our network. Mapper is the node which mapping the incoming data to the corresponding character. After mapping, mapper nodes send the mapped data to the client node using UDP connection.
+
+### Constructor:
+```cpp
+mapper::mapper (uint16_t mapper_port, Ipv4InterfaceContainer& staNodesMapperInterface , uint16_t client_port, Ipv4InterfaceContainer& staNodesClientInterface , int mapper_id)
+```
+
+We need to override the StartApplication function to start the mapper application when the simulation starts.
+
+### StartApplication:
+```cpp
+void
+mapper::StartApplication (void)
+{
+    master_socket = Socket::CreateSocket (GetNode (), TcpSocketFactory::GetTypeId ());
+    InetSocketAddress local = InetSocketAddress (staNodesMapperInterface.GetAddress(mapper_id), mapper_port + mapper_id);
+    master_socket->Bind (local);
+    master_socket->Listen();
+    
+    client_socket = Socket::CreateSocket (GetNode (), UdpSocketFactory::GetTypeId ());
+    InetSocketAddress sockAddr (staNodesClientInterface.GetAddress(0), client_port);
+    client_socket->Connect (sockAddr);
+    
+    master_socket->SetAcceptCallback (MakeNullCallback<bool, Ptr<Socket>, const Address &> (),
+                               MakeCallback (&mapper::HandleAccept, this));
+    
+
+}
+```
+
+In this function, first we create a TCP socket to receive the packets from the master node.  
+Then we create a UDP socket to send the mapped data to the client node.  
+Finally, we set the ```HandleAccept``` function as the callback function to handle the incoming packets.
+
+### HandleAccept:
+```cpp
+void 
+mapper::HandleAccept (Ptr<Socket> s, const Address& from)
+{
+    s->SetRecvCallback (MakeCallback (&mapper::HandleRead, this));
+}
+```
+
+In this function, we set the ```HandleRead``` function as the callback function to handle the incoming packets.
+
+### HandleRead:
+```cpp
+void 
+mapper::HandleRead (Ptr<Socket> socket1)
+{
+    Ptr<Packet> packet;
+    while ((packet = socket1->Recv ()))
+    {
+        if (packet->GetSize () == 0)
+        {
+            break;
+        }
+
+        MyHeader destinationHeader;
+        packet->RemoveHeader (destinationHeader);
+        int value = destinationHeader.GetData();
+        auto it = encodings.find(value);
+        if (it != encodings.end()) {
+            destinationHeader.SetData(it->second);
+        } else {
+            continue;
+        }
+
+        Ptr<Packet> send_packet = new Packet();
+        send_packet->AddHeader(destinationHeader);
+        client_socket->Send (send_packet);
+
+    }
+}
+```
+
+In this function, we receive the packets from the master node and send the mapped data to the client node using UDP connection if we got the encoded data in this mapper node.
+
 
 
 ## sample.cc
