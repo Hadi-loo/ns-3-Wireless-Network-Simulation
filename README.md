@@ -1,4 +1,4 @@
-# CN_CHomeworks_2
+# ns-3 Wireless Network Simulation
 
 ## ns3-simulation
 In this project, we simulate a simple network topology of 3 nodes using NS3 3.35 YANS Simulator. Note that our system coded using IEEE 802.11 protocol.
